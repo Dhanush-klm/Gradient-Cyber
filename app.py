@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 import pandas as pd
 from openai import OpenAI
 import tiktoken
@@ -7,10 +8,12 @@ import time
 import os
 import traceback
 import logging
-from dotenv import load_dotenv
+import json
 
 app = Flask(__name__)
+CORS(app)  # This will enable CORS for all routes
 
+from dotenv import load_dotenv
 load_dotenv()
 
 # Access your API key
@@ -21,7 +24,7 @@ BATCH_SIZE = 100
 MAX_RESULTS = 1000
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Initialize OpenAI
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -92,7 +95,7 @@ def expand_query(original_query):
         logging.error(f"Error in query expansion: {str(e)}")
         return original_query  # Return original query if expansion fails
 
-def truncate_context(context, max_tokens=14000):
+def truncate_context(context, max_tokens=6000):
     encoding = tiktoken.get_encoding("cl100k_base")
     encoded = encoding.encode(context)
     truncated = encoded[:max_tokens]
@@ -154,8 +157,10 @@ def upload_file():
         logging.error(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/query', methods=['POST'])
+@app.route('/api/query', methods=['POST', 'OPTIONS'])
 def process_query():
+    if request.method == 'OPTIONS':
+        return '', 204
     try:
         query = request.json['query']
         logging.info(f"Received query: {query}")
@@ -193,30 +198,92 @@ def process_query():
                 for match in filtered_results
             ])
 
-        truncated_context = truncate_context(context)
+        truncated_context = truncate_context(context, max_tokens=6000)
 
-        system_prompt = """You are an AI assistant specializing in analyzing SITREP data. Provide a comprehensive answer based on the given context. Focus on key patterns, trends, and relevant details. If information is missing, state what is known and what is uncertain."""
+        system_prompt = """You are an AI assistant specializing in analyzing SITREP data. Provide a comprehensive answer based on the given context. Focus on key patterns, trends, and relevant details. If information is missing, state what is known and what is uncertain. Structure your response with the following sections:
+
+1. **Summary**: A brief overview of the main points.
+2. **Key Findings**: List the most important discoveries or insights.
+3. **Details**: Elaborate on the key findings with specific information from the context.
+4. **Uncertainties**: Mention any gaps in the information or areas that require further investigation.
+5. **Recommendations**: Suggest next steps or areas for further analysis.
+
+Use markdown formatting to structure your response, including bold text for emphasis and bullet points for lists."""
+
         user_prompt = f"""Query: {query}
     Relevant Information:
     {truncated_context}
-    Provide a clear, concise, and comprehensive answer. Synthesize information from multiple entries if necessary. Cite specific details and examples when applicable. If information is missing, state what is known and what remains uncertain."""
+    Provide a clear, concise, and comprehensive answer following the structure outlined in the system prompt. Synthesize information from multiple entries if necessary. Cite specific details and examples when applicable."""
 
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+
+        # Calculate total tokens
+        encoding = tiktoken.get_encoding("cl100k_base")
+        total_tokens = sum(len(encoding.encode(msg["content"])) for msg in messages)
+
+        # If total tokens exceed the limit, further truncate the context
+        if total_tokens > 8000:
+            max_context_tokens = 8000 - len(encoding.encode(system_prompt)) - len(encoding.encode(query)) - 100  # 100 tokens buffer
+            truncated_context = truncate_context(truncated_context, max_tokens=max_context_tokens)
+            user_prompt = f"""Query: {query}
+    Relevant Information:
+    {truncated_context}
+    Provide a clear, concise, and comprehensive answer following the structure outlined in the system prompt. Synthesize information from multiple entries if necessary. Cite specific details and examples when applicable."""
+            messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
-            ],
+            ]
+
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=messages,
             max_tokens=1000,
             temperature=0.7
         )
 
         answer = response.choices[0].message.content
-        return jsonify({"answer": answer})
+        
+        # Create an interactive structure
+        interactive_answer = {
+            "summary": "",
+            "key_findings": [],
+            "details": "",
+            "uncertainties": [],
+            "recommendations": []
+        }
+        
+        # Parse the GPT-4 response to fill the interactive structure
+        current_section = None
+        for line in answer.split('\n'):
+            if '**Summary**' in line:
+                current_section = "summary"
+            elif '**Key Findings**' in line:
+                current_section = "key_findings"
+            elif '**Details**' in line:
+                current_section = "details"
+            elif '**Uncertainties**' in line:
+                current_section = "uncertainties"
+            elif '**Recommendations**' in line:
+                current_section = "recommendations"
+            elif current_section:
+                if current_section in ["key_findings", "uncertainties", "recommendations"]:
+                    if line.strip().startswith('- '):
+                        interactive_answer[current_section].append(line.strip()[2:])
+                else:
+                    interactive_answer[current_section] += line + "\n"
+        
+        logging.info("Successfully processed query and generated response")
+        return jsonify({
+            "structured_answer": interactive_answer,
+            "full_answer": answer
+        })
     except Exception as e:
         logging.error(f"Error in process_query: {str(e)}")
         logging.error(traceback.format_exc())
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"An error occurred while processing the query: {str(e)}"}), 500
 
 @app.errorhandler(Exception)
 def handle_exception(e):
