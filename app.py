@@ -11,7 +11,6 @@ import os
 
 app = Flask(__name__, static_folder='.')
 CORS(app)
-
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -29,9 +28,10 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 pc = Pinecone(api_key=PINECONE_API_KEY)
 pinecone_index = pc.Index(INDEX_NAME)
 
-def truncate_text(text, max_tokens=8000):
+def truncate_text(text, max_tokens=4000):
     encoding = tiktoken.get_encoding("cl100k_base")
-    return encoding.decode(encoding.encode(text)[:max_tokens])
+    encoded = encoding.encode(text)
+    return encoding.decode(encoded[:max_tokens])
 
 def generate_embedding(text):
     try:
@@ -49,7 +49,7 @@ def process_query_logic(query):
     results = pinecone_index.query(
         namespace="ns1",
         vector=query_embedding,
-        top_k=10,
+        top_k=5,
         include_metadata=True
     )
 
@@ -63,27 +63,30 @@ def process_query_logic(query):
         for match in results['matches']
     ])
 
-    truncated_context = truncate_text(context)
+    truncated_context = truncate_text(context, max_tokens=4000)
 
-    system_prompt = """You are an AI assistant specializing in analyzing SITREP data. Provide a comprehensive answer based on the given context. Structure your response with: 1. Summary, 2. Key Findings, 3. Details, 4. Uncertainties, 5. Recommendations."""
+    system_prompt = """You are an AI assistant specializing in analyzing SITREP data. Provide a concise answer based on the given context. Structure your response with: 1. Summary, 2. Key Findings, 3. Recommendations."""
 
     user_prompt = f"Query: {query}\nRelevant Information:\n{truncated_context}\nProvide a structured answer based on the given information."
 
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        max_tokens=1000,
-        temperature=0.7
-    )
-
-    return jsonify({"answer": response.choices[0].message.content})
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=500,
+            temperature=0.7
+        )
+        return jsonify({"answer": response.choices[0].message.content})
+    except Exception as e:
+        logging.error(f"Error in OpenAI API call: {str(e)}")
+        return jsonify({"error": "An error occurred while processing the query"}), 500
 
 @app.route('/')
 def index():
-    return send_from_directory('.', 'index.html')
+    return render_template('.','index.html')
 
 @app.route('/styles.css')
 def styles():
@@ -93,20 +96,17 @@ def styles():
 def script():
     return send_from_directory('.', 'script.js')
 
-@app.route('/api/query', methods=['GET', 'POST'])
+@app.route('/api/query', methods=['POST'])
 def process_query():
-    logging.info(f"Received {request.method} request to /api/query")
+    logging.info(f"Received POST request to /api/query")
     logging.info(f"Request headers: {request.headers}")
     logging.info(f"Request data: {request.get_data(as_text=True)}")
 
     try:
-        if request.method == 'POST':
-            data = request.get_json()
-            if data is None:
-                return jsonify({"error": "Invalid JSON"}), 400
-            query = data.get('query')
-        else:  # GET
-            query = request.args.get('query')
+        data = request.get_json()
+        if data is None:
+            return jsonify({"error": "Invalid JSON"}), 400
+        query = data.get('query')
 
         if not query:
             return jsonify({"error": "No query provided"}), 400
