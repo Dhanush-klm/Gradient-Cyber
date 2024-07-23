@@ -83,7 +83,7 @@ def process_query_logic(query):
 
 @app.route('/')
 def index():
-    return render_template('.','index.html')
+    return send_from_directory('.', 'index.html')
 
 @app.route('/styles.css')
 def styles():
