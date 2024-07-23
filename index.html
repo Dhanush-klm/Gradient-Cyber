@@ -7,7 +7,43 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
+    <div class="container"><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SITREP Query</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div id="app">
+        <h1>SITREP Query</h1>
+        <input type="text" id="queryInput" placeholder="Enter your query">
+        <button onclick="submitQuery()">Submit</button>
+        <div id="result"></div>
+    </div>
+    <script src="/script.js"></script>
+    <script>
+    function submitQuery() {
+        const query = document.getElementById('queryInput').value;
+        fetch('/api/query', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({query: query}),
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('result').innerHTML = data.answer;
+        })
+        .catch((error) => {
+            console.error('Error:', error);
+        });
+    }
+    </script>
+</body>
+</html>
         <h1>Gradient-cyber</h1>
         
         <div id="upload-section">
