@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, render_template
 from flask_cors import CORS
 import pandas as pd
 from openai import OpenAI
@@ -7,6 +7,7 @@ from pinecone import Pinecone
 import time
 import logging
 import traceback
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -82,21 +83,32 @@ def process_query_logic(query):
 
 @app.route('/')
 def index():
-    return send_from_directory('.', 'index.html')
+    return render_template('index.html')
 
 @app.route('/styles.css')
 def styles():
-    return send_from_directory('.', 'styles.css')
+    return send_from_directory('templates', 'styles.css')
 
 @app.route('/script.js')
 def script():
-    return send_from_directory('.', 'script.js')
+    return send_from_directory('templates', 'script.js')
 
-@app.route('/api/query', methods=['POST'])
+@app.route('/api/query', methods=['GET', 'POST'])
 def process_query():
+    logging.info(f"Received {request.method} request to /api/query")
+    logging.info(f"Request headers: {request.headers}")
+    logging.info(f"Request data: {request.get_data(as_text=True)}")
+
     try:
-        query = request.json['query']
-        logging.info(f"Received query: {query}")
+        if request.method == 'POST':
+            query = request.json['query']
+        else:  # GET
+            query = request.args.get('query')
+
+        if not query:
+            return jsonify({"error": "No query provided"}), 400
+
+        logging.info(f"Processing query: {query}")
         return process_query_logic(query)
     except Exception as e:
         logging.error(f"Error in process_query: {str(e)}")
@@ -110,4 +122,5 @@ def handle_exception(e):
     return jsonify({"error": "An unexpected error occurred"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
