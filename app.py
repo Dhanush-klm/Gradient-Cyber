@@ -70,7 +70,7 @@ def process_query_logic(query):
     user_prompt = f"Query: {query}\nRelevant Information:\n{truncated_context}\nProvide a structured answer based on the given information."
 
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
