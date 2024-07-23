@@ -4,48 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gradient-cyber</title>
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-    <div class="container"><!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SITREP Query</title>
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-    <div id="app">
-        <h1>SITREP Query</h1>
-        <input type="text" id="queryInput" placeholder="Enter your query">
-        <button onclick="submitQuery()">Submit</button>
-        <div id="result"></div>
-    </div>
-    <script src="/script.js"></script>
-    <script>
-    function submitQuery() {
-        const query = document.getElementById('queryInput').value;
-        fetch('/api/query', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({query: query}),
-        })
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('result').innerHTML = data.answer;
-        })
-        .catch((error) => {
-            console.error('Error:', error);
-        });
-    }
-    </script>
-</body>
-</html>
+    <div class="container">
         <h1>Gradient-cyber</h1>
-        
+       
         <div id="upload-section">
             <h2>Upload Excel File</h2>
             <input type="file" id="file-upload" accept=".xlsx">
@@ -53,7 +17,6 @@
             <div id="upload-status"></div>
             <div id="file-preview"></div>
         </div>
-
         <div id="query-section">
             <h2>Query the Uploaded Data</h2>
             <input type="text" id="query-input" placeholder="Enter your query">
@@ -61,8 +24,7 @@
             <div id="query-result"></div>
         </div>
     </div>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
-    <script src="script.js"></script>
+    <script src="/script.js"></script>
 </body>
 </html>
