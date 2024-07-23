@@ -9,9 +9,10 @@ import logging
 import traceback
 import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='.')
 CORS(app)
 
+# Configuration
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -87,11 +88,11 @@ def index():
 
 @app.route('/styles.css')
 def styles():
-    return send_from_directory('templates', 'styles.css')
+    return send_from_directory('.', 'styles.css')
 
 @app.route('/script.js')
 def script():
-    return send_from_directory('templates', 'script.js')
+    return send_from_directory('.', 'script.js')
 
 @app.route('/api/query', methods=['GET', 'POST'])
 def process_query():
@@ -101,7 +102,10 @@ def process_query():
 
     try:
         if request.method == 'POST':
-            query = request.json['query']
+            data = request.get_json()
+            if data is None:
+                return jsonify({"error": "Invalid JSON"}), 400
+            query = data.get('query')
         else:  # GET
             query = request.args.get('query')
 
@@ -114,6 +118,34 @@ def process_query():
         logging.error(f"Error in process_query: {str(e)}")
         logging.error(traceback.format_exc())
         return jsonify({"error": f"An error occurred while processing the query: {str(e)}"}), 500
+
+@app.route('/api/upload', methods=['POST'])
+def upload_data():
+    logging.info(f"Received POST request to /api/upload")
+    logging.info(f"Request headers: {request.headers}")
+
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({"error": "Invalid JSON"}), 400
+
+        # Process and upload data to Pinecone
+        # This is a placeholder - you'll need to implement the actual upload logic
+        total_tokens_used = 0
+        total_requests = 0
+
+        # Simulate processing
+        time.sleep(2)
+
+        return jsonify({
+            "message": "Upload successful",
+            "totalTokensUsed": total_tokens_used,
+            "totalRequests": total_requests
+        })
+    except Exception as e:
+        logging.error(f"Error in upload_data: {str(e)}")
+        logging.error(traceback.format_exc())
+        return jsonify({"error": f"An error occurred while uploading data: {str(e)}"}), 500
 
 @app.errorhandler(Exception)
 def handle_exception(e):
